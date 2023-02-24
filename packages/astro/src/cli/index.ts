@@ -20,6 +20,8 @@ import * as event from '../events/index.js';
 import { eventConfigError, eventError, telemetry } from '../events/index.js';
 import { check } from './check/index.js';
 import { openInBrowser } from './open.js';
+import { createServer } from 'vite';
+import { createVite } from '../core/create-vite.js';
 
 type Arguments = yargs.Arguments;
 type CLICommand =
@@ -207,15 +209,31 @@ async function runCommand(cmd: string, flags: yargs.Arguments) {
 		}
 
 		case 'check': {
-			const ret = await check(settings, { logging });
-			return process.exit(ret);
+			const checkResult = await check({ settings, flags, logging });
+			if (checkResult == 2) {
+				return await new Promise(() => {}); // lives forever
+			} else {
+				return process.exit(checkResult);
+			}
 		}
 
 		case 'sync': {
 			const { syncCli } = await import('../core/sync/index.js');
 
-			const ret = await syncCli(settings, { logging, fs });
-			return process.exit(ret);
+			const viteServer = await createServer(
+				await createVite(
+					{
+						server: { middlewareMode: true, hmr: false },
+						optimizeDeps: { entries: [] },
+						logLevel: 'silent',
+					},
+					{ settings, logging, mode: 'build', fs }
+				)
+			);
+
+			const result = await syncCli({ settings, logging, fs, viteServer });
+			await viteServer.close();
+			return process.exit(result);
 		}
 
 		case 'preview': {

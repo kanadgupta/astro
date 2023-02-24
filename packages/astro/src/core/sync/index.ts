@@ -1,35 +1,58 @@
 import { dim } from 'kleur/colors';
 import type fsMod from 'node:fs';
 import { performance } from 'node:perf_hooks';
-import { createServer } from 'vite';
+import { ViteDevServer } from 'vite';
 import type { AstroSettings } from '../../@types/astro';
 import { createContentTypesGenerator } from '../../content/index.js';
 import { globalContentConfigObserver } from '../../content/utils.js';
 import { runHookConfigSetup } from '../../integrations/index.js';
 import { setUpEnvTs } from '../../vite-plugin-inject-env-ts/index.js';
 import { getTimeStat } from '../build/util.js';
-import { createVite } from '../create-vite.js';
 import { AstroError, AstroErrorData } from '../errors/index.js';
 import { info, LogOptions } from '../logger/core.js';
 
 type ProcessExit = 0 | 1;
 
-export async function syncCli(
-	settings: AstroSettings,
-	{ logging, fs }: { logging: LogOptions; fs: typeof fsMod }
-): Promise<ProcessExit> {
+type SyncParameters = {
+	settings: AstroSettings;
+	logging: LogOptions;
+
+	fs: typeof fsMod;
+
+	viteServer: ViteDevServer;
+};
+
+export async function syncCli({
+	logging,
+	settings,
+	...restOfParameters
+}: SyncParameters): Promise<ProcessExit> {
 	const resolvedSettings = await runHookConfigSetup({
 		settings,
 		logging,
 		command: 'build',
 	});
-	return sync(resolvedSettings, { logging, fs });
+	return sync({ settings: resolvedSettings, logging, ...restOfParameters });
 }
 
-export async function sync(
-	settings: AstroSettings,
-	{ logging, fs }: { logging: LogOptions; fs: typeof fsMod }
-): Promise<ProcessExit> {
+/**
+ * Generate content collection types, and then returns the process exit signal.
+ *
+ * A non-zero process signal is emitted in case there's an error while generating content collection types.
+ *
+ * @param {SyncParameters} options
+ * @param {AstroSettings} options.settings Astro settings
+ * @param {typeof fsMod} options.fs The file system
+ * @param {LogOptions} options.logging Logging options
+ * @param {ViteDevServer} options.viteServer Instance of the vite server
+ * @return {Promise<ProcessExit>}
+ */
+export async function sync({
+	logging,
+	fs,
+	settings,
+	viteServer,
+}: SyncParameters): Promise<ProcessExit> {
 	const timerStart = performance.now();
 	// Needed to load content config
 	const tempViteServer = await createServer(
@@ -49,7 +72,7 @@ export async function sync(
 			logging,
 			fs,
 			settings,
-			viteServer: tempViteServer,
+			viteServer,
 		});
 		const typesResult = await contentTypesGenerator.init();
 
@@ -68,8 +91,6 @@ export async function sync(
 		}
 	} catch (e) {
 		throw new AstroError(AstroErrorData.GenerateContentTypesError);
-	} finally {
-		await tempViteServer.close();
 	}
 
 	info(logging, 'content', `Types generated ${dim(getTimeStat(timerStart, performance.now()))}`);
