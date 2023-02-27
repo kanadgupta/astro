@@ -13,6 +13,7 @@ import type { Arguments as Flags } from 'yargs-parser';
 import { debug, info } from '../../core/logger/core.js';
 import { createServer, ViteDevServer } from 'vite';
 import { createVite } from '../../core/create-vite.js';
+import type { CreateViteOptions } from '../../core/create-vite';
 import type { SyncOptions, ProcessExit } from '../../core/sync';
 import fsMod from 'fs';
 
@@ -47,7 +48,7 @@ type CheckFlags = {
 	watch: boolean;
 };
 
-enum CheckResult {
+export enum CheckResult {
 	ExitWithSuccess,
 	ExitWithError,
 	Listen,
@@ -70,8 +71,10 @@ const ASTRO_GLOB_PATTERN = '**/*.astro';
  */
 export async function check({ settings, logging, flags }: CheckPayload): Promise<CheckResult> {
 	let checkFlags = parseFlags(flags);
+	let options: CreateViteOptions = { settings, logging, mode: 'build', fs };
 	if (checkFlags.watch) {
 		info(logging, 'check', 'Checking files in watch mode');
+		options.isWatcherEnabled = true;
 	} else {
 		info(logging, 'check', 'Checking files');
 	}
@@ -83,9 +86,10 @@ export async function check({ settings, logging, flags }: CheckPayload): Promise
 				optimizeDeps: { entries: [] },
 				logLevel: 'silent',
 			},
-			{ settings, logging, mode: 'build', fs }
+			options
 		)
 	);
+
 	const { syncCli } = await import('../../core/sync/index.js');
 	const root = settings.config.root;
 	const require = createRequire(import.meta.url);
@@ -165,11 +169,7 @@ class Checker {
 			this.#watch();
 			return CheckResult.Listen;
 		} else {
-			const processExit = await this.#checkAll(isWatchMode);
-			if (processExit === 1) {
-				return processExit;
-			}
-			return CheckResult.ExitWithSuccess;
+			return await this.#checkAll(isWatchMode);
 		}
 	}
 
@@ -196,7 +196,9 @@ class Checker {
 
 		let brokenDownDiagnostics = this.#breakDownDiagnostics(diagnostics);
 		this.#logDiagnosticsSeverity(brokenDownDiagnostics);
-		return brokenDownDiagnostics.errors > 0 ? 1 : 0;
+		return brokenDownDiagnostics.errors > 0
+			? CheckResult.ExitWithError
+			: CheckResult.ExitWithSuccess;
 	}
 
 	#checkForDiagnostics() {
