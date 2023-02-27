@@ -98,7 +98,7 @@ export async function check({ settings, logging, flags }: CheckPayload): Promise
 		syncCli,
 		settings,
 		server: viteServer,
-		fs,
+		fileSystem: fs,
 		logging,
 		diagnosticChecker,
 		watch: checkFlags.watch,
@@ -118,7 +118,7 @@ type CheckerConstructor = {
 
 	logging: Readonly<LogOptions>;
 
-	fs: typeof fsMod;
+	fileSystem: typeof fsMod;
 };
 
 /**
@@ -146,7 +146,7 @@ class Checker {
 		watch,
 		syncCli,
 		settings,
-		fs,
+		fileSystem,
 		logging,
 	}: CheckerConstructor) {
 		this.#server = server;
@@ -155,7 +155,7 @@ class Checker {
 		this.#syncCli = syncCli;
 		this.#logging = logging;
 		this.#settings = settings;
-		this.#fs = fs;
+		this.#fs = fileSystem;
 		this.#filesCount = 0;
 	}
 
@@ -198,11 +198,7 @@ class Checker {
 
 		let brokenDownDiagnostics = this.#breakDownDiagnostics(diagnostics);
 		this.#logDiagnosticsSeverity(brokenDownDiagnostics);
-		if (isWatchMode) {
-			return -1;
-		} else {
-			return brokenDownDiagnostics.errors > 0 ? 1 : 0;
-		}
+		return brokenDownDiagnostics.errors > 0 ? 1 : 0;
 	}
 
 	#checkForDiagnostics() {
