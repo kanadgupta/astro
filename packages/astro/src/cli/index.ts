@@ -220,19 +220,7 @@ async function runCommand(cmd: string, flags: yargs.Arguments) {
 		case 'sync': {
 			const { syncCli } = await import('../core/sync/index.js');
 
-			const viteServer = await createServer(
-				await createVite(
-					{
-						server: { middlewareMode: true, hmr: false },
-						optimizeDeps: { entries: [] },
-						logLevel: 'silent',
-					},
-					{ settings, logging, mode: 'build', fs }
-				)
-			);
-
-			const result = await syncCli({ settings, logging, fs, viteServer });
-			await viteServer.close();
+			const result = await syncCli(settings, { logging, fs });
 			return process.exit(result);
 		}
 
