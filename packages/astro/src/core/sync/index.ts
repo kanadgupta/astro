@@ -11,14 +11,12 @@ import { getTimeStat } from '../build/util.js';
 import { AstroError, AstroErrorData } from '../errors/index.js';
 import { info, LogOptions } from '../logger/core.js';
 
-type ProcessExit = 0 | 1;
+export type ProcessExit = 0 | 1;
 
-type SyncParameters = {
+export type SyncParameters = {
 	settings: AstroSettings;
 	logging: LogOptions;
-
 	fs: typeof fsMod;
-
 	viteServer: ViteDevServer;
 };
 
