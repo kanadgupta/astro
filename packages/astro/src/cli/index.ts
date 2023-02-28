@@ -20,6 +20,8 @@ import * as event from '../events/index.js';
 import { eventConfigError, eventError, telemetry } from '../events/index.js';
 import { check, CheckResult } from './check/index.js';
 import { openInBrowser } from './open.js';
+import { createServer } from 'vite';
+import { createVite } from '../core/create-vite';
 
 type Arguments = yargs.Arguments;
 type CLICommand =
@@ -207,10 +209,13 @@ async function runCommand(cmd: string, flags: yargs.Arguments) {
 		}
 
 		case 'check': {
-			const checkResult = await check({ settings, flags, logging });
-			if (checkResult == 2) {
+			// We create a server to start doing our operations
+			const checkServer = await check(settings, { flags, logging });
+			if (checkServer.isWatchMode) {
+				await checkServer.watch();
 				return await new Promise(() => {}); // lives forever
 			} else {
+				let checkResult = await checkServer.check();
 				return process.exit(checkResult);
 			}
 		}

@@ -26,10 +26,6 @@ type DiagnosticResult = {
 
 type CheckPayload = {
 	/**
-	 * Astro settings
-	 */
-	settings: AstroSettings;
-	/**
 	 * Flags passed via CLI
 	 */
 	flags: Flags;
@@ -64,12 +60,15 @@ const ASTRO_GLOB_PATTERN = '**/*.astro';
  *
  * Every time an astro files is modified, content collections are also generated.
  *
+ * @param {AstroSettings} settings
  * @param {CheckPayload} options
  * @param {Flags} options.flags
  * @param {LogOptions} options.logging
- * @param {AstroSettings} options.settings
  */
-export async function check({ settings, logging, flags }: CheckPayload): Promise<CheckResult> {
+export async function check(
+	settings: AstroSettings,
+	{ logging, flags }: CheckPayload
+): Promise<CheckServer> {
 	let checkFlags = parseFlags(flags);
 	let options: CreateViteOptions = { settings, logging, mode: 'build', fs };
 	if (checkFlags.watch) {
@@ -98,23 +97,22 @@ export async function check({ settings, logging, flags }: CheckPayload): Promise
 		require.resolve('typescript/lib/tsserverlibrary.js', { paths: [root.toString()] })
 	);
 
-	const checker = new Checker({
+	return new CheckServer({
 		syncCli,
 		settings,
 		server: viteServer,
 		fileSystem: fs,
 		logging,
 		diagnosticChecker,
-		watch: checkFlags.watch,
+		isWatchMode: checkFlags.watch,
 	});
-	return await checker.run(checkFlags.watch);
 }
 
 type CheckerConstructor = {
 	server: ViteDevServer;
 	diagnosticChecker: AstroCheck;
 
-	watch: boolean;
+	isWatchMode: boolean;
 
 	syncCli: (settings: AstroSettings, options: SyncOptions) => Promise<ProcessExit>;
 
@@ -131,7 +129,7 @@ type CheckerConstructor = {
  * When in watch mode, the class does a whole check pass, and then starts watching files.
  * When a change occurs to an `.astro` file, the checker
  */
-class Checker {
+class CheckServer {
 	readonly #server: ViteDevServer;
 	readonly #diagnosticsChecker: AstroCheck;
 	readonly #shouldWatch: boolean;
@@ -147,7 +145,7 @@ class Checker {
 	constructor({
 		server,
 		diagnosticChecker,
-		watch,
+		isWatchMode,
 		syncCli,
 		settings,
 		fileSystem,
@@ -155,7 +153,7 @@ class Checker {
 	}: CheckerConstructor) {
 		this.#server = server;
 		this.#diagnosticsChecker = diagnosticChecker;
-		this.#shouldWatch = watch;
+		this.#shouldWatch = isWatchMode;
 		this.#syncCli = syncCli;
 		this.#logging = logging;
 		this.#settings = settings;
@@ -163,17 +161,33 @@ class Checker {
 		this.#filesCount = 0;
 	}
 
-	public async run(isWatchMode: boolean): Promise<CheckResult> {
-		if (isWatchMode) {
-			await this.#checkAll(isWatchMode);
-			this.#watch();
-			return CheckResult.Listen;
-		} else {
-			return await this.#checkAll(isWatchMode);
-		}
+	public async check(): Promise<CheckResult> {
+		return await this.#checkAll(true);
 	}
 
-	async #checkAll(isWatchMode: boolean): Promise<CheckResult> {
+	public async watch(): Promise<CheckResult.Listen> {
+		await this.#checkAll(true);
+		this.#watch();
+		return CheckResult.Listen;
+	}
+
+	public async stop() {
+		await this.#server.close();
+	}
+
+	public get isWatchMode(): boolean {
+		return this.#shouldWatch;
+	}
+
+	async #openDocuments() {
+		this.#filesCount = await openAllDocuments(
+			this.#settings.config.root,
+			[],
+			this.#diagnosticsChecker
+		);
+	}
+
+	async #checkAll(openDocuments = false): Promise<CheckResult> {
 		const processExit = await this.#syncCli(this.#settings, {
 			logging: this.#logging,
 			fs: this.#fs,
@@ -185,11 +199,10 @@ class Checker {
 			` Getting diagnostics for Astro files in ${fileURLToPath(this.#settings.config.root)}…`
 		).start();
 
-		this.#filesCount = await openAllDocuments(
-			this.#settings.config.root,
-			[],
-			this.#diagnosticsChecker
-		);
+		if (openDocuments) {
+			await this.#openDocuments();
+		}
+
 		let diagnostics = await this.#diagnosticsChecker.getDiagnostics();
 
 		spinner.succeed();
@@ -205,7 +218,7 @@ class Checker {
 		clearTimeout(this.#updateDiagnostics);
 		// @ematipico: I am not sure of `setTimeout`. I would rather use a debounce but let's see if this works.
 		// Inspiration from `svelte-check`.
-		this.#updateDiagnostics = setTimeout(async () => await this.#checkAll(true), 500);
+		this.#updateDiagnostics = setTimeout(async () => await this.#checkAll(false), 500);
 	}
 
 	/**
@@ -216,6 +229,7 @@ class Checker {
 		this.#server.watcher.on('add', (file) => {
 			if (file.endsWith('.astro')) {
 				this.#addDocument(file);
+				this.#filesCount += 1;
 				this.#checkForDiagnostics();
 			}
 		});
@@ -236,16 +250,15 @@ class Checker {
 
 	/**
 	 * Add a document to the diagnostics checker
-	 * @param file
+	 * @param filePath
 	 * @private
 	 */
-	#addDocument(file: string) {
-		const text = fs.readFileSync(file, 'utf-8');
+	#addDocument(filePath: string) {
+		const text = fs.readFileSync(filePath, 'utf-8');
 		this.#diagnosticsChecker.upsertDocument({
-			uri: pathToFileURL(file).toString(),
+			uri: pathToFileURL(filePath).toString(),
 			text,
 		});
-		this.#filesCount += 1;
 	}
 
 	/**
@@ -338,8 +351,6 @@ async function openAllDocuments(
  */
 function parseFlags(flags: Flags): CheckFlags {
 	return {
-		// TODO: https://github.com/withastro/roadmap/issues/473
-		// Rename to `--watch` when the feature is stable
-		watch: flags.experimentalWatch ?? false,
+		watch: flags.watch ?? false,
 	};
 }
