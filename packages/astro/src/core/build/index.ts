@@ -20,16 +20,34 @@ import { createRouteManifest } from '../routing/index.js';
 import { collectPagesData } from './page-data.js';
 import { staticBuild } from './static-build.js';
 import { getTimeStat } from './util.js';
+import { printHelp } from '../messages.js';
+import yargs from 'yargs-parser';
 
 export interface BuildOptions {
 	mode?: RuntimeMode;
 	logging: LogOptions;
 	telemetry: AstroTelemetry;
+	flags: yargs.Arguments;
 }
 
 /** `astro build` */
 export default async function build(settings: AstroSettings, options: BuildOptions): Promise<void> {
 	applyPolyfill();
+	if (options.flags.help || options.flags.h) {
+		printHelp({
+			commandName: 'astro build',
+			usage: '[...flags]',
+			tables: {
+				Flags: [
+					['--drafts', `Includes Markdown draft pages in the build.`],
+					['--help (-h)', 'See all available flags.'],
+				],
+			},
+			description: `Builds your site for deployment.`,
+		});
+		return;
+	}
+
 	const builder = new AstroBuilder(settings, options);
 	await builder.run();
 }
