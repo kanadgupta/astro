@@ -27,13 +27,13 @@ export interface BuildOptions {
 	mode?: RuntimeMode;
 	logging: LogOptions;
 	telemetry: AstroTelemetry;
-	flags: yargs.Arguments;
+	flags?: yargs.Arguments;
 }
 
 /** `astro build` */
 export default async function build(settings: AstroSettings, options: BuildOptions): Promise<void> {
 	applyPolyfill();
-	if (options.flags.help || options.flags.h) {
+	if (options.flags?.help) {
 		printHelp({
 			commandName: 'astro build',
 			usage: '[...flags]',
