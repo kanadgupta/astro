@@ -20,7 +20,6 @@ import { createRouteManifest } from '../routing/index.js';
 import { collectPagesData } from './page-data.js';
 import { staticBuild } from './static-build.js';
 import { getTimeStat } from './util.js';
-import { createServer } from 'vite';
 
 export interface BuildOptions {
 	mode?: RuntimeMode;
