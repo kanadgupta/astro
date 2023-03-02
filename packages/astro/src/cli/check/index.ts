@@ -168,8 +168,10 @@ class CheckServer {
 	 * @returns {Promise<CheckResult>}
 	 */
 	public async watch(): Promise<CheckResult> {
+		console.warn('Checker -> check all files' + '\n');
 		await this.#checkAllFiles(true);
-		await this.#watch();
+		console.warn('Checker -> start watcher' + '\n');
+		this.#watch();
 		return CheckResult.Listen;
 	}
 
@@ -244,7 +246,9 @@ class CheckServer {
 	 * @private
 	 */
 	async #watch() {
+		console.warn('Checker -> watch -> import watcher' + '\n');
 		const { default: chokidar } = await import('chokidar');
+		console.warn('Checker -> watch -> set up watcher' + '\n');
 		this.#watcher = chokidar.watch(
 			join(fileURLToPath(this.#settings.config.root), ASTRO_GLOB_PATTERN),
 			{
@@ -253,6 +257,7 @@ class CheckServer {
 			}
 		);
 
+		console.warn('Checker -> watch -> set up hooks' + '\n');
 		this.#watcher.on('add', (file) => {
 			this.#addDocument(file);
 			this.#filesCount += 1;

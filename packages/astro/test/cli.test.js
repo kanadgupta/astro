@@ -37,6 +37,7 @@ describe('astro cli', () => {
 				dest: new Writable({
 					objectMode: true,
 					write(event, _, callback) {
+						console.warn('Test -> \n' + event.message + '\n');
 						logs.push({ ...event, message: stripAnsi(event.message) });
 						if (event.message.includes('1 error')) {
 							messageResolve(logs);
@@ -46,13 +47,22 @@ describe('astro cli', () => {
 				}),
 			},
 		});
+		setTimeout(() => {
+			return Promise.resolve();
+		}, 20000);
+		console.warn('Test -> start watch' + '\n');
 		await checkServer.watch();
 		const pagePath = join(fileURLToPath(fixture.config.root), 'src/pages/index.astro');
 		const pageContent = readFileSync(pagePath, 'utf-8');
+
+		console.warn('Test -> write to file' + '\n');
 		await fs.writeFile(pagePath, oneErrorContent);
+		console.warn('Test -> wait for messages to finish' + '\n');
 		const messages = await messagePromise;
 		await fs.writeFile(pagePath, pageContent);
+		console.warn('Test -> stop watcher' + '\n');
 		await checkServer.stop();
+		console.warn('Test -> assert diagnostics' + '\n');
 		const diagnostics = messages.filter(
 			(m) => m.type === 'diagnostics' && m.message.includes('Result')
 		);
